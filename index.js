@@ -3,7 +3,6 @@ const express = require('express');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
 const admin = require('firebase-admin');
-const { getFirestore } = require('firebase-admin/firestore');
 const fs = require('fs');
 const path = require('path');
 
@@ -19,12 +18,14 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 
 const app = express();
 
-// Initialize Firebase Admin SDK
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
+// Initialize Firebase Admin SDK (only once, avoids re-init errors on serverless)
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+}
 
-const db = getFirestore();
+const db = admin.firestore();
 
 app.use(cors());
 app.use(express.json());
