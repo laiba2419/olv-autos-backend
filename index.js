@@ -2,8 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
-const { initializeApp, cert } = require('firebase-admin/app');
-const { getAuth } = require('firebase-admin/auth');
+const admin = require('firebase-admin');
 const { getFirestore } = require('firebase-admin/firestore');
 const fs = require('fs');
 const path = require('path');
@@ -21,8 +20,8 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 const app = express();
 
 // Initialize Firebase Admin SDK
-initializeApp({
-  credential: cert(serviceAccount),
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
 });
 
 const db = getFirestore();
@@ -52,20 +51,15 @@ app.post('/send-otp', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Email is required' });
   }
 
-  // Generate 4-digit OTP
   const otp = Math.floor(1000 + Math.random() * 9000).toString();
-
-  // Set expiry to 5 minutes from now
   const expiresAt = Date.now() + 5 * 60 * 1000;
 
-  // Save OTP in Firestore (instead of memory, so it works on serverless hosting)
   await db.collection('password_reset_otps').doc(email).set({
     otp,
     expiresAt,
     verified: false,
   });
 
-  // Email content
   const mailOptions = {
     from: `"OLV Autos" <${process.env.GMAIL_USER}>`,
     to: email,
@@ -109,7 +103,6 @@ app.post('/verify-otp', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Invalid OTP' });
   }
 
-  // Mark this email as verified so reset-password can be allowed
   await docRef.update({ verified: true });
 
   return res.status(200).json({ success: true, message: 'OTP verified successfully' });
@@ -131,15 +124,12 @@ app.post('/reset-password', async (req, res) => {
   }
 
   try {
-    // Find the Firebase user by email
-    const user = await getAuth().getUserByEmail(email);
+    const user = await admin.auth().getUserByEmail(email);
 
-    // Update the password
-    await getAuth().updateUser(user.uid, {
+    await admin.auth().updateUser(user.uid, {
       password: newPassword,
     });
 
-    // Clear the OTP record after successful password reset
     await docRef.delete();
 
     return res.status(200).json({ success: true, message: 'Password reset successfully' });
