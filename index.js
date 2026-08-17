@@ -4,7 +4,13 @@ const cors = require('cors');
 const nodemailer = require('nodemailer');
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
-const serviceAccount = require('./serviceAccountKey.json');
+const { getFirestore } = require('firebase-admin/firestore');
+
+// On Render/Vercel, use the FIREBASE_SERVICE_ACCOUNT environment variable.
+// On local machine, fall back to the local serviceAccountKey.json file.
+const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
+  ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+  : require('./serviceAccountKey.json');
 
 const app = express();
 
@@ -13,12 +19,10 @@ initializeApp({
   credential: cert(serviceAccount),
 });
 
+const db = getFirestore();
+
 app.use(cors());
 app.use(express.json());
-
-// Temporary in-memory storage for OTPs
-// Format: { "email@example.com": { otp: "1234", expiresAt: timestamp, verified: false } }
-const otpStore = {};
 
 // Setup nodemailer transporter using Gmail
 const transporter = nodemailer.createTransport({
@@ -48,8 +52,12 @@ app.post('/send-otp', async (req, res) => {
   // Set expiry to 5 minutes from now
   const expiresAt = Date.now() + 5 * 60 * 1000;
 
-  // Save OTP in memory
-  otpStore[email] = { otp, expiresAt, verified: false };
+  // Save OTP in Firestore (instead of memory, so it works on serverless hosting)
+  await db.collection('password_reset_otps').doc(email).set({
+    otp,
+    expiresAt,
+    verified: false,
+  });
 
   // Email content
   const mailOptions = {
@@ -70,21 +78,24 @@ app.post('/send-otp', async (req, res) => {
 });
 
 // Route: Verify OTP
-app.post('/verify-otp', (req, res) => {
+app.post('/verify-otp', async (req, res) => {
   const { email, otp } = req.body;
 
   if (!email || !otp) {
     return res.status(400).json({ success: false, message: 'Email and OTP are required' });
   }
 
-  const record = otpStore[email];
+  const docRef = db.collection('password_reset_otps').doc(email);
+  const docSnap = await docRef.get();
 
-  if (!record) {
+  if (!docSnap.exists) {
     return res.status(400).json({ success: false, message: 'No OTP found for this email. Please request a new one.' });
   }
 
+  const record = docSnap.data();
+
   if (Date.now() > record.expiresAt) {
-    delete otpStore[email];
+    await docRef.delete();
     return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new one.' });
   }
 
@@ -93,7 +104,7 @@ app.post('/verify-otp', (req, res) => {
   }
 
   // Mark this email as verified so reset-password can be allowed
-  otpStore[email].verified = true;
+  await docRef.update({ verified: true });
 
   return res.status(200).json({ success: true, message: 'OTP verified successfully' });
 });
@@ -106,9 +117,10 @@ app.post('/reset-password', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Email and new password are required' });
   }
 
-  const record = otpStore[email];
+  const docRef = db.collection('password_reset_otps').doc(email);
+  const docSnap = await docRef.get();
 
-  if (!record || !record.verified) {
+  if (!docSnap.exists || !docSnap.data().verified) {
     return res.status(400).json({ success: false, message: 'OTP not verified for this email. Please verify OTP first.' });
   }
 
@@ -122,7 +134,7 @@ app.post('/reset-password', async (req, res) => {
     });
 
     // Clear the OTP record after successful password reset
-    delete otpStore[email];
+    await docRef.delete();
 
     return res.status(200).json({ success: true, message: 'Password reset successfully' });
   } catch (error) {
