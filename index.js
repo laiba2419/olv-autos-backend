@@ -5,12 +5,18 @@ const nodemailer = require('nodemailer');
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
+const fs = require('fs');
+const path = require('path');
 
 // On Render/Vercel, use the FIREBASE_SERVICE_ACCOUNT environment variable.
 // On local machine, fall back to the local serviceAccountKey.json file.
-const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
-  ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-  : require('./serviceAccountKey.json');
+let serviceAccount;
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} else {
+  const keyPath = path.join(__dirname, 'serviceAccountKey.json');
+  serviceAccount = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
+}
 
 const app = express();
 
