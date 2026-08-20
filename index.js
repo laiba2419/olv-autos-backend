@@ -2,7 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
-const admin = require('firebase-admin');
+const firebaseAdminModule = require('firebase-admin');
+const admin = firebaseAdminModule.default || firebaseAdminModule;
 const fs = require('fs');
 const path = require('path');
 
