@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
 const firebaseAdminModule = require('firebase-admin');
-const admin = firebaseAdminModule.default || firebaseAdminModule;
+const admin = (firebaseAdminModule.apps ? firebaseAdminModule : firebaseAdminModule.default) || firebaseAdminModule;
 const fs = require('fs');
 const path = require('path');
 
@@ -20,7 +20,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 const app = express();
 
 // Initialize Firebase Admin SDK (only once, avoids re-init errors on serverless)
-if (!admin.apps.length) {
+if (!admin.apps || !admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
   });
