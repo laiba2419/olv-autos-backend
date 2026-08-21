@@ -2,10 +2,9 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
-const firebaseAdminModule = require('firebase-admin');
-const admin = typeof firebaseAdminModule.initializeApp === 'function'
-  ? firebaseAdminModule
-  : firebaseAdminModule.default;
+const { initializeApp, cert, getApps } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
+const { getAuth } = require('firebase-admin/auth');
 const fs = require('fs');
 const path = require('path');
 
@@ -22,13 +21,14 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 const app = express();
 
 // Initialize Firebase Admin SDK (only once, avoids re-init errors on serverless)
-if (!admin.apps || !admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+if (!getApps().length) {
+  initializeApp({
+    credential: cert(serviceAccount),
   });
 }
 
-const db = admin.firestore();
+const db = getFirestore();
+const auth = getAuth();
 
 app.use(cors());
 app.use(express.json());
@@ -128,9 +128,9 @@ app.post('/reset-password', async (req, res) => {
   }
 
   try {
-    const user = await admin.auth().getUserByEmail(email);
+    const user = await auth.getUserByEmail(email);
 
-    await admin.auth().updateUser(user.uid, {
+    await auth.updateUser(user.uid, {
       password: newPassword,
     });
 
