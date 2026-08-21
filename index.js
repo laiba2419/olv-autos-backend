@@ -3,7 +3,9 @@ const express = require('express');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
 const firebaseAdminModule = require('firebase-admin');
-const admin = (firebaseAdminModule.apps ? firebaseAdminModule : firebaseAdminModule.default) || firebaseAdminModule;
+const admin = typeof firebaseAdminModule.initializeApp === 'function'
+  ? firebaseAdminModule
+  : firebaseAdminModule.default;
 const fs = require('fs');
 const path = require('path');
 
